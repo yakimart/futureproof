@@ -1,17 +1,18 @@
 import os
 import re
-import time
 import logging
 from datetime import timedelta
 
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
+from RPA.FileSystem import FileSystem
 from RPA.PDF import PDF
 
 
 browser_lib = Selenium()
 excel_file = Files()
 pdf = PDF()
+file_system = FileSystem()
 
 
 def open_the_website(url):
@@ -106,15 +107,12 @@ def download_file(link):
     condition = "return document.getElementById('USERFLAG').getAttribute('aria-busy') == \"false\""
     browser_lib.wait_for_condition(condition=condition, timeout=timedelta(seconds=20))
 
-    time.sleep(3)  # wait till file is downloaded
+    file_name = ((browser_lib.find_element('id:uii')).get_attribute("value")) + '.pdf'
+    file_path = os.path.join("output", file_name)
 
-    return get_recent_file("output")
+    file_system.wait_until_created(file_path)
 
-
-def get_recent_file(path):
-    files = os.listdir(path)
-    paths = [os.path.join(path, basename) for basename in files]
-    return max(paths, key=os.path.getctime)
+    return file_path
 
 
 def compare_values(equalities, file):
@@ -123,9 +121,9 @@ def compare_values(equalities, file):
     uii = re.search(r"2\. Unique Investment Identifier \(UII\): (.*)Section B", text).group(1)
 
     if equalities[uii] == investment:
-        logging.info(uii, investment, "EQUAL")
+        logging.warning(f" {uii}, {investment}, EQUAL")
     else:
-        logging.info(uii, investment, "NOT EQUAL")
+        logging.warning(f" {uii}, {investment}, NOT EQUAL")
 
 
 def clean_dir(folder):
