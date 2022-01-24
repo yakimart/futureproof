@@ -37,19 +37,17 @@ def get_agency_list():
     return result_list
 
 
-def write_to_excel(sheetname, bookname, content, method):
+def write_to_excel(sheetname, bookname, content):
     if not os.path.exists("output"):
         os.mkdir("output")
     book_path = os.path.join("output", bookname)
-
-    if method == "write":
-        excel_file.create_workbook(book_path)
-    elif method == "append":
+    if os.path.exists(book_path):
         excel_file.open_workbook(book_path)
+    else:
+        excel_file.create_workbook(book_path)
 
     if not excel_file.worksheet_exists(sheetname):
         excel_file.create_worksheet(name=sheetname)
-
     excel_file.set_active_worksheet(sheetname)
     excel_file.append_rows_to_worksheet(content)
     excel_file.save_workbook()
@@ -89,7 +87,7 @@ def scrape_table(headers):
         table_data.append(data_set)
         equalities[data_set[0]] = data_set[2]
 
-    write_to_excel(sheetname="Individual Investments", bookname="spending.xlsx", content=table_data, method="append")
+    write_to_excel(sheetname="Individual Investments", bookname="spending.xlsx", content=table_data)
 
     for link in links:
         file = download_file(link)
@@ -137,7 +135,7 @@ def main():
     try:
         open_the_website("https://itdashboard.gov/drupal/")
         click_button()
-        write_to_excel("Agencies", "spending.xlsx", content=get_agency_list(), method="write")
+        write_to_excel("Agencies", "spending.xlsx", content=get_agency_list())
         select_department("Department of the Interior")
         scrape_table(["UII", "Bureau", "Investment Title", "Total FY2021 Spending ($M)", "Type", "CIO Rating", "# of Projects"])
 
