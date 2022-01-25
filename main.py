@@ -71,31 +71,31 @@ def scrape_table(headers):
 
     table = browser_lib.find_element('id:investments-table-object >> tag:tbody')
     table_data = [headers]
-    links = []
-    equalities = {}  # dict with "UII": "Name of investment"
+    links = []  # list of links
+    equalities = []  # list of data from rows containing links
 
     for row in table.find_elements_by_tag_name("tr"):
         cols = row.find_elements_by_tag_name("td")
         data_set = []
+        contains_link = False
 
         for data in cols:
             data_set.append(data.text)
             a_element = data.find_elements_by_tag_name("a")
             if a_element:
                 links.append(a_element[0].get_attribute("href"))
+                contains_link = True
+
+        if contains_link:
+            equalities.append([data_set[0], data_set[2]])
 
         table_data.append(data_set)
 
-        if data_set[0] in equalities:  # check if UII in dict
-            equalities[data_set[0]] = [equalities[data_set[0]]] + [data_set[2]]  # transform value to list and add new
-        else:
-            equalities[data_set[0]] = data_set[2]  # set new key value pair
-
     write_to_excel(sheetname="Individual Investments", bookname="spending.xlsx", content=table_data)
 
-    for link in links:
+    for index, link in enumerate(links):
         file = download_file(link)
-        compare_values(equalities, file)
+        compare_values(equalities[index], file)
 
 
 def download_file(link):
@@ -122,20 +122,10 @@ def compare_values(equalities, file):
     investment = re.search(r"1\. Name of this Investment: (.*)2\.", text).group(1)
     uii = re.search(r"2\. Unique Investment Identifier \(UII\): (.*)Section B", text).group(1)
 
-    if equalities[uii] == investment:
+    if equalities == [uii, investment]:
         logging.warning(f" {uii}, {investment}, EQUAL")
     else:
         logging.warning(f" {uii}, {investment}, NOT EQUAL")
-        if isinstance(equalities[uii], list):
-            logging.warning(f" {uii} | {equalities[uii]}, A FEW INVESTS HAVE THE SAME UII IN TABLE")
-
-
-
-def clean_dir(folder):
-    path = os.path.abspath(folder)
-    for item in os.listdir(path):
-        if (not item.endswith(".xlsx")) and (not item.endswith(".pdf")):
-            os.remove(os.path.join(path, item))
 
 
 def main():
@@ -143,12 +133,11 @@ def main():
         open_the_website("https://itdashboard.gov/drupal/")
         click_button()
         write_to_excel("Agencies", "spending.xlsx", content=get_agency_list())
-        select_department("Department of the Interior")
+        select_department(os.getenv('AGENCY_NAME', 'Department of Commerce'))
         scrape_table(["UII", "Bureau", "Investment Title", "Total FY2021 Spending ($M)", "Type", "CIO Rating", "# of Projects"])
 
     finally:
         browser_lib.close_all_browsers()
-        clean_dir("output")
 
 
 if __name__ == "__main__":
