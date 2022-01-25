@@ -85,7 +85,11 @@ def scrape_table(headers):
                 links.append(a_element[0].get_attribute("href"))
 
         table_data.append(data_set)
-        equalities[data_set[0]] = data_set[2]
+
+        if data_set[0] in equalities:  # check if UII in dict
+            equalities[data_set[0]] = [equalities[data_set[0]]] + [data_set[2]]  # transform value to list and add new
+        else:
+            equalities[data_set[0]] = data_set[2]  # set new key value pair
 
     write_to_excel(sheetname="Individual Investments", bookname="spending.xlsx", content=table_data)
 
@@ -122,6 +126,9 @@ def compare_values(equalities, file):
         logging.warning(f" {uii}, {investment}, EQUAL")
     else:
         logging.warning(f" {uii}, {investment}, NOT EQUAL")
+        if isinstance(equalities[uii], list):
+            logging.warning(f" {uii} | {equalities[uii]}, A FEW INVESTS HAVE THE SAME UII IN TABLE")
+
 
 
 def clean_dir(folder):
