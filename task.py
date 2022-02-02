@@ -3,6 +3,8 @@ import re
 import logging
 from datetime import timedelta
 
+import pandas as pd
+
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
 from RPA.FileSystem import FileSystem
@@ -58,7 +60,7 @@ def select_department(name):
     department_element = [i for i in browser_lib.find_elements(selector) if name in i.text][0]
 
     browser_lib.click_element(department_element)
-    browser_lib.wait_until_element_is_visible("id:investments-table-widget", timeout=timedelta(seconds=20))
+    browser_lib.wait_until_element_is_visible("id:investments-table-object", timeout=timedelta(seconds=20))
 
 
 def scrape_table(headers):
@@ -69,33 +71,16 @@ def scrape_table(headers):
     condition = "return document.getElementById('investments-table-object_last').classList.contains('disabled')"
     browser_lib.wait_for_condition(condition=condition, timeout=timedelta(seconds=20))
 
-    table = browser_lib.find_element('id:investments-table-object >> tag:tbody')
-    table_data = [headers]
-    links = []  # list of links
-    equalities = []  # list of data from rows containing links
+    widget = browser_lib.find_element("id:investments-table-object")
+    table = pd.read_html(widget.get_attribute('outerHTML'))[0]
+    links = [i.get_attribute('href') for i in widget.find_elements_by_tag_name("a")]
 
-    for row in table.find_elements_by_tag_name("tr"):
-        cols = row.find_elements_by_tag_name("td")
-        data_set = []
-        contains_link = False
+    content = [headers] + table.values.tolist()
+    write_to_excel(sheetname="Individual Investments", bookname="spending.xlsx", content=content)
 
-        for data in cols:
-            data_set.append(data.text)
-            a_element = data.find_elements_by_tag_name("a")
-            if a_element:
-                links.append(a_element[0].get_attribute("href"))
-                contains_link = True
-
-        if contains_link:
-            equalities.append([data_set[0], data_set[2]])
-
-        table_data.append(data_set)
-
-    write_to_excel(sheetname="Individual Investments", bookname="spending.xlsx", content=table_data)
-
-    for index, link in enumerate(links):
+    for link in links:
         file = download_file(link)
-        compare_values(equalities[index], file)
+        compare_values(table, file)
 
 
 def download_file(link):
@@ -104,25 +89,21 @@ def download_file(link):
 
     browser_lib.wait_until_element_is_visible(element, timeout=timedelta(seconds=20))
     browser_lib.click_element(element)
-    browser_lib.assign_id_to_element(locator=element, id="USERFLAG")
-
-    condition = "return document.getElementById('USERFLAG').getAttribute('aria-busy') == \"false\""
-    browser_lib.wait_for_condition(condition=condition, timeout=timedelta(seconds=20))
 
     file_name = ((browser_lib.find_element('id:uii')).get_attribute("value")) + '.pdf'
     file_path = os.path.join("output", file_name)
 
-    file_system.wait_until_created(file_path)
+    file_system.wait_until_created(file_path, timeout=20)
 
     return file_path
 
 
-def compare_values(equalities, file):
-    text = pdf.get_text_from_pdf(file)[1]
-    investment = re.search(r"1\. Name of this Investment: (.*)2\.", text).group(1)
+def compare_values(table, file):
+    text = (pdf.get_text_from_pdf(file)[1]).replace('\n', ' ')
+    investment = (re.search(r"1\. Name of this Investment: ([\s\S]*)2\. Unique Investment Identifier", text).group(1))
     uii = re.search(r"2\. Unique Investment Identifier \(UII\): (.*)Section B", text).group(1)
 
-    if equalities == [uii, investment]:
+    if ((table['UII'] == uii) & (table['Investment Title'] == investment)).any():
         logging.warning(f" {uii}, {investment}, EQUAL")
     else:
         logging.warning(f" {uii}, {investment}, NOT EQUAL")
@@ -130,10 +111,10 @@ def compare_values(equalities, file):
 
 def main():
     try:
-        open_the_website("https://itdashboard.gov/drupal/")
+        open_the_website("https://itdashboard.gov")
         click_button()
         write_to_excel("Agencies", "spending.xlsx", content=get_agency_list())
-        select_department(os.getenv('AGENCY_NAME', 'Department of Commerce'))
+        select_department(os.getenv('AGENCY_NAME', 'National Archives and Records Administration'))
         scrape_table(["UII", "Bureau", "Investment Title", "Total FY2021 Spending ($M)", "Type", "CIO Rating", "# of Projects"])
 
     finally:
